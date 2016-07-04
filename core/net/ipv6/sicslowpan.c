@@ -280,6 +280,7 @@ struct sicslowpan_frag_buf {
 static struct sicslowpan_frag_buf frag_buf[SICSLOWPAN_FRAGMENT_BUFFERS];
 
 #define SICSLOWPAN_SCORE_ENTRIES 8
+#define SICSLOWPAN_SCORE_THRESHOLD 25
 
 struct sicslowpan_score_entry {
   linkaddr_t sender;
@@ -435,8 +436,26 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
     }
 
     if(found < 0) {
-      PRINTF("*** Failed to store new fragment session - tag: %d\n", tag);
-      return -1;
+      struct sicslowpan_score_entry *entry = find_score_entry((linkaddr_t*) packetbuf_addr(PACKETBUF_ADDR_SENDER));
+      uint8_t highest_score = calculate_score(entry);
+      if (highest_score < SICSLOWPAN_SCORE_THRESHOLD) {
+        highest_score = SICSLOWPAN_SCORE_THRESHOLD;
+      }
+      int highest_index = -1;
+      for(i = 0; i < SICSLOWPAN_REASS_CONTEXTS; i++) {
+        entry = find_score_entry(&frag_info[i].sender);
+        uint8_t current_score = calculate_score(entry);
+        if (current_score > highest_score) {
+          highest_score = current_score;
+          highest_index = i;
+        }
+      }
+      if (highest_index < 0) {
+        PRINTFI("*** Failed to store new fragment session - tag: %d\n", tag);
+        return -1;
+      }
+      PRINTFI("Kicking evil packet from reassembly context.\n");
+      found = highest_index;
     }
 
     /* Found a free fragment info to store data in */
