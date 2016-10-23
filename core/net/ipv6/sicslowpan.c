@@ -345,19 +345,30 @@ store_fragment(uint8_t index, uint8_t offset)
   return -1;
 }
 
-static void print_score_table() {
-  int i;
-  printf("Sender, Score, Timestamp\n");
-  for (i = 0; i < SICSLOWPAN_SCORE_ENTRIES; i++) {
-    printf("%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", sender_scores[i].sender.u8[0], sender_scores[i].sender.u8[1], sender_scores[i].sender.u8[2], sender_scores[i].sender.u8[3], sender_scores[i].sender.u8[4], sender_scores[i].sender.u8[5], sender_scores[i].sender.u8[6], sender_scores[i].sender.u8[7]);
-    printf(", %u, %lu\n", sender_scores[i].score, sender_scores[i].timestamp);
-  }
-}
-
 static uint8_t calculate_score(struct sicslowpan_score_entry *entry) {
   unsigned long time_difference = (clock_seconds() - entry->timestamp) / 4;
   int16_t current_score = entry->score - time_difference;
   return current_score < 0 ? 0 : current_score;
+}
+
+static void print_score_table() {
+  int i, j;
+  printf("[Score Table] Sender, Score, Timestamp\n");
+  for (i = 0; i < SICSLOWPAN_SCORE_ENTRIES; i++) {
+    struct sicslowpan_score_entry *entry = &sender_scores[i];
+    uint8_t score = calculate_score(entry);
+
+    if (score == 0)
+      continue;
+
+    printf("              ");
+    for (j = 0; j < 8; j++) {
+      printf("%02x", entry->sender.u8[j]);
+      if (j < 7)
+        printf(":");
+    }
+    printf(", %u, %lu\n", score, entry->timestamp);
+  }
 }
 
 static struct sicslowpan_score_entry *find_score_entry(linkaddr_t *address) {
@@ -381,11 +392,11 @@ static struct sicslowpan_score_entry *find_lowest_score_entry() {
   int i;
   for(i = 0; i < SICSLOWPAN_SCORE_ENTRIES; i++) {
     uint8_t current_score = calculate_score(&sender_scores[i]);
-    PRINTFI("Entry %d, Score %u\n", i, current_score);
+    //PRINTFI("Entry %d, Score %u\n", i, current_score);
     if (current_score < lowest_score) {
       lowest_score = current_score;
       lowest_entry = &sender_scores[i];
-      PRINTFI("Found lowest: %u (%d)\n", lowest_score, i);
+      //PRINTFI("Found lowest: %u (%d)\n", lowest_score, i);
     }
   }
   update_score(lowest_entry, lowest_score);
@@ -408,7 +419,7 @@ add_fragment(uint16_t tag, uint16_t frag_size, uint8_t offset)
       /* clear all fragment info with expired timer to free all fragment buffers */
       if(frag_info[i].len > 0 && timer_expired(&frag_info[i].reass_timer)) {
         uint8_t frag_score = (10 * frag_info[i].reassembled_len) / frag_info[i].len;
-        PRINTFI("Score: %u\n", frag_score);
+        //PRINTFI("Score: %u\n", frag_score);
 
         struct sicslowpan_score_entry *entry = find_score_entry(&frag_info[i].sender);
         if (entry == NULL) {
